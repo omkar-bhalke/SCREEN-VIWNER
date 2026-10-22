@@ -6,6 +6,7 @@ import info.dvkr.screenstream.common.module.StreamingModule
 import info.dvkr.screenstream.common.module.StreamingModuleManager
 import info.dvkr.screenstream.common.settings.AppSettings
 import info.dvkr.screenstream.common.settings.AppSettingsImpl
+import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
 
 object CommonKoinModuleKt {
