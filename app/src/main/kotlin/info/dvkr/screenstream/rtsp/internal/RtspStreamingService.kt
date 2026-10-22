@@ -124,8 +124,10 @@ class RtspStreamingService(
             while (isActive) {
                 val idx = encoder.dequeueOutputBuffer(bufferInfo, 10_000L)
                 if (idx < 0) continue
-                val buf = encoder.getOutputBuffer(idx) ?: run {
-                    encoder.releaseOutputBuffer(idx, false); continue
+                val buf = encoder.getOutputBuffer(idx)
+                if (buf == null) {
+                    encoder.releaseOutputBuffer(idx, false)
+                    continue
                 }
 
                 val isConfig = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0
@@ -240,8 +242,8 @@ class RtspStreamingService(
         runCatching { serverSocket?.close() }
         serverSocket = null
     }
-}
 
     fun clearError() {
         _state.update { it.copy(error = null) }
     }
+}

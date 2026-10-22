@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import info.dvkr.screenstream.R
 import info.dvkr.screenstream.common.module.StreamingModule
 import info.dvkr.screenstream.rtsp.ui.RtspMainScreenUI
 import kotlinx.coroutines.flow.MutableStateFlow

@@ -76,6 +76,7 @@ dependencies {
 
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.default.headers)
 
     implementation(libs.protobuf.java)
 

@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import info.dvkr.screenstream.mjpeg.internal.MjpegEvent
 import info.dvkr.screenstream.mjpeg.internal.MjpegStreamingService
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 class MjpegViewModel(

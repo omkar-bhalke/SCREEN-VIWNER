@@ -220,7 +220,8 @@ class WebRtcStreamingService(
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "false"))
         }
         pc.createOffer(object : SimpleSdpObserver() {
-            override fun onCreateSuccess(sdp: SessionDescription) {
+            override fun onCreateSuccess(p0: SessionDescription?) {
+                val sdp = p0 ?: return
                 pc.setLocalDescription(SimpleSdpObserver(), sdp)
                 signalingSocket?.emit("offer", JSONObject()
                     .put("id", clientId)

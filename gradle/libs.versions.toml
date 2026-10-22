@@ -55,6 +55,7 @@ koin-compose-viewmodel = { group = "io.insert-koin", name = "koin-androidx-compo
 # Ktor server (MJPEG HTTP server)
 ktor-server-netty = { group = "io.ktor", name = "ktor-server-netty", version.ref = "ktor" }
 ktor-server-core = { group = "io.ktor", name = "ktor-server-core", version.ref = "ktor" }
+ktor-server-default-headers = { group = "io.ktor", name = "ktor-server-default-headers", version.ref = "ktor" }
 
 # DataStore + Protobuf
 protobuf-java = { group = "com.google.protobuf", name = "protobuf-java", version.ref = "protobuf-java" }
