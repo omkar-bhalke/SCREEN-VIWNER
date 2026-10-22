@@ -15,14 +15,14 @@ import org.koin.android.ext.android.inject
 class SingleActivity : AppUpdateActivity() {
 
     private val streamingModulesManager: StreamingModuleManager by inject()
-    private val appSettings: AppSettings by inject()
+    private val injectedAppSettings: AppSettings by inject()
 
-    override fun getAppSettings(): AppSettings = appSettings
+    override fun getAppSettings(): AppSettings = injectedAppSettings
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            ScreenStreamTheme(appSettings = appSettings) {
+            ScreenStreamTheme(appSettings = injectedAppSettings) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
