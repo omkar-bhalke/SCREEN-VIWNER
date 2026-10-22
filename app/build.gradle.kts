@@ -93,4 +93,5 @@ dependencies {
     implementation(libs.admob)
     implementation(libs.zxing)
     implementation(libs.timber)
+    implementation(libs.material)
 }
