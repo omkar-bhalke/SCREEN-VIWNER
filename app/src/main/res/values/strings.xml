@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ScreenStream</string>
+    <string name="mjpeg_module_name">MJPEG</string>
+    <string name="mjpeg_module_description">HTTP streaming — open URL in browser or VLC</string>
+    <string name="mjpeg_module_details">Broadcasts screen as MJPEG over local Wi-Fi. No accounts needed.</string>
+    <string name="rtsp_module_name">RTSP</string>
+    <string name="rtsp_module_description">RTSP/RTP streaming — open in VLC, OBS, ffplay</string>
+    <string name="rtsp_module_details">Streams H.264/H.265 video over local network via RTSP.</string>
+    <string name="webrtc_module_name">WebRTC</string>
+    <string name="webrtc_module_description">WebRTC streaming — share link, view in browser</string>
+    <string name="webrtc_module_details">Streams to any browser via WebRTC. Works over internet.</string>
+    <string name="notification_stop">Stop</string>
+    <string name="error_cast_denied">Cast permission denied</string>
+</resources>
