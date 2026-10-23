@@ -2,7 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   workflow_dispatch:
 
 jobs:
@@ -16,19 +16,15 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      # Project me gradlew / wrapper jar nahi hai, isliye Gradle khud install karte hain
+      # Project me gradlew nahi hai, isliye Gradle khud install hota hai
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 9.3.1
 
-      # .env gitignored hai, isliye secret se banate hain
-      - name: Create .env from secret
-        run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
-
       # build.gradle.kts debug.keystore maangta hai (gitignored)
       - name: Generate debug keystore
         run: |
-          keytool -genkeypair -v -keystore debug.keystore \
+          keytool -genkeypair -keystore debug.keystore \
             -storepass android -keypass android \
             -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"

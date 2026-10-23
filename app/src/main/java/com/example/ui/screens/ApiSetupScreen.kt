@@ -171,7 +171,7 @@ fun ApiSetupScreen(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
                         .background(Color(0xFF0A0F1A))
-                        .border(width = 1.dp, color = Color(0x2B384E), shape = RoundedCornerShape(18.dp))
+                        .border(width = 1.dp, color = Color(0xFF2B384E), shape = RoundedCornerShape(18.dp))
                         .padding(18.dp)
                 ) {
                     Column(modifier = Modifier.fillMaxWidth()) {

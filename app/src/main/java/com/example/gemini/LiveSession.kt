@@ -1,7 +1,6 @@
 package com.example.gemini
 
 import android.util.Log
-import com.example.BuildConfig
 import com.example.data.local.UserMemoryEntity
 import com.example.model.AhiEmotion
 import com.example.model.UserProfile
@@ -41,7 +40,7 @@ class LiveSession(
         memories: List<UserMemoryEntity>,
         apiKey: String?
     ): Pair<String, SessionResponse> = withContext(Dispatchers.IO) {
-        val effectiveKey = if (!apiKey.isNullOrBlank()) apiKey else BuildConfig.GEMINI_API_KEY
+        val effectiveKey: String = apiKey?.trim().orEmpty()
 
         // Check for direct memory saving intent
         val memoryIntent = detectMemorySaveIntent(userText)
