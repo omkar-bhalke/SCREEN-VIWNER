@@ -1,37 +1,21 @@
-# ScreenStream ProGuard rules
+# Add project specific ProGuard rules here.
+# You can control the set of applied configuration files using the
+# proguardFiles setting in build.gradle.
+#
+# For more details, see
+#   http://developer.android.com/guide/developing/tools/proguard.html
 
-# Keep WebRTC classes
--keep class org.webrtc.** { *; }
--dontwarn org.webrtc.**
+# If your project uses WebView with JS, uncomment the following
+# and specify the fully qualified class name to the JavaScript interface
+# class:
+#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
+#   public *;
+#}
 
-# Keep Socket.IO
--keep class io.socket.** { *; }
--dontwarn io.socket.**
+# Uncomment this to preserve the line number information for
+# debugging stack traces.
+#-keepattributes SourceFile,LineNumberTable
 
-# Keep OkHttp
--keep class okhttp3.** { *; }
--dontwarn okhttp3.**
-
-# Keep Koin
--keep class org.koin.** { *; }
--dontwarn org.koin.**
-
-# Keep Ktor
--keep class io.ktor.** { *; }
--dontwarn io.ktor.**
-
-# Keep data classes (Kotlin serialization)
--keepclassmembers class * {
-    @kotlinx.serialization.Serializable *;
-}
-
-# Keep Kotlin metadata
--keep class kotlin.Metadata { *; }
--dontwarn kotlin.**
-
-# Firebase
--keep class com.google.firebase.** { *; }
--dontwarn com.google.firebase.**
-
-# Timber
--dontwarn org.jetbrains.annotations.**
+# If you keep the line number information, uncomment this to
+# hide the original source file name.
+#-renamesourcefileattribute SourceFile

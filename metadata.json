@@ -1,0 +1,6 @@
+{
+  "name": "AHI",
+  "description": "AHI - Futuristic, witty, real-time voice-to-voice AI companion and assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
