@@ -64,7 +64,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.gemini.GeminiApiTester
-import com.example.gemini.GeminiConfig
 import com.example.gemini.TestResult
 import kotlinx.coroutines.launch
 
@@ -172,7 +171,7 @@ fun ApiSetupScreen(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
                         .background(Color(0xFF0A0F1A))
-                        .border(width = 1.dp, color = Color(0xFF2B384E), shape = RoundedCornerShape(18.dp))
+                        .border(width = 1.dp, color = Color(0x2B384E), shape = RoundedCornerShape(18.dp))
                         .padding(18.dp)
                 ) {
                     Column(modifier = Modifier.fillMaxWidth()) {
@@ -298,7 +297,7 @@ fun ApiSetupScreen(
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                                         val clip = clipboard?.primaryClip?.getItemAt(0)?.text?.toString()
                                         if (!clip.isNullOrBlank()) {
-                                            apiKeyText = GeminiConfig.cleanKey(clip)
+                                            apiKeyText = clip.trim()
                                             testFeedback = null
                                             isError = false
                                         }
@@ -426,6 +425,21 @@ fun ApiSetupScreen(
                                 color = if (isError) Color(0xFFF87171) else Color(0xFF34D399),
                                 fontWeight = FontWeight.Medium
                             )
+
+                            if (isError) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "→ Tap here to save key without testing",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF38BDF8),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable { onKeySaved(apiKeyText.trim()) }
+                                        .padding(vertical = 4.dp, horizontal = 2.dp)
+                                        .testTag("save_anyway_button")
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -521,17 +535,22 @@ fun ApiSetupScreen(
                         .clickable(enabled = canSubmit) {
                             scope.launch {
                                 isTesting = true
-                                testFeedback = "Validating key before saving..."
+                                testFeedback = "Validating key with Gemini..."
                                 isError = false
                                 val result = GeminiApiTester.testKey(apiKeyText)
                                 isTesting = false
                                 when (result) {
                                     is TestResult.Success -> {
-                                        onKeySaved(GeminiConfig.cleanKey(apiKeyText))
+                                        onKeySaved(apiKeyText.trim())
                                     }
                                     is TestResult.Error -> {
-                                        testFeedback = result.message
-                                        isError = true
+                                        if (result.isNetworkIssue && isError) {
+                                            // User tapped again despite network issue, save anyway!
+                                            onKeySaved(apiKeyText.trim())
+                                        } else {
+                                            testFeedback = result.message
+                                            isError = true
+                                        }
                                     }
                                 }
                             }
