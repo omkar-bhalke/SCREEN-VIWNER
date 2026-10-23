@@ -102,6 +102,20 @@ class AudioPlayer(
         tts?.setSpeechRate(rate)
     }
 
+    fun setLanguage(languageName: String) {
+        val targetLocale = when {
+            languageName.contains("Hindi", ignoreCase = true) -> Locale("hi", "IN")
+            languageName.contains("Hinglish", ignoreCase = true) -> Locale("en", "IN")
+            else -> Locale.US
+        }
+        tts?.let { engine ->
+            val result = engine.setLanguage(targetLocale)
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                engine.language = Locale.US
+            }
+        }
+    }
+
     fun speak(text: String) {
         if (text.isBlank()) return
         stop()

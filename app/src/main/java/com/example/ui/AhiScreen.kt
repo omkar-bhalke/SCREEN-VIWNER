@@ -33,9 +33,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -66,7 +68,10 @@ import com.example.model.LiveState
 import com.example.ui.components.FlowingRibbonOrb
 import com.example.ui.components.InputCapsule
 import com.example.ui.components.MemorySheet
+import com.example.ui.components.PermissionsSheet
 import com.example.ui.components.ProfileSettingsSheet
+import com.example.ui.components.UnifiedPermissionModal
+import com.example.ui.components.VoiceManagementSheet
 import com.example.ui.screens.ApiSetupScreen
 
 @Composable
@@ -81,12 +86,17 @@ fun AhiScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showMemorySheet by remember { mutableStateOf(false) }
     var showProfileSheet by remember { mutableStateOf(false) }
+    var showPermissionsSheet by remember { mutableStateOf(false) }
+    var showVoiceManagementSheet by remember { mutableStateOf(false) }
+
+    val readinessState by viewModel.unifiedPermissionManager.readinessState.collectAsStateWithLifecycle()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         viewModel.setMicPermissionGranted(isGranted)
-        if (isGranted) {
+        if (isGranted && uiState.isInternetConnected) {
+            viewModel.dismissUnifiedPermissionModal()
             viewModel.startListening()
         }
     }
@@ -100,7 +110,9 @@ fun AhiScreen(
     }
 
     // SCREEN 1: API SETUP POPUP (Shows on first open or when requested)
-    if (uiState.showApiSetupDialog || !uiState.hasSavedApiKey) {
+    // Resilient check: never repeatedly pops up once key is configured
+    val isKeyConfigured = uiState.hasSavedApiKey || viewModel.keystoreManager.isConfigured()
+    if (!isKeyConfigured || uiState.showApiSetupDialog) {
         ApiSetupScreen(
             onKeySaved = { key ->
                 viewModel.saveApiKeyFromSetup(key)
@@ -199,20 +211,33 @@ fun AhiScreen(
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Key, contentDescription = null, tint = Color(0xFF2DD4BF), modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.GraphicEq, contentDescription = null, tint = Color(0xFF00F0FF), modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(10.dp))
-                                    Text("Change / Remove API Key", color = Color.White, fontSize = 13.sp)
+                                    Text("Voice & Persona Hub", color = Color.White, fontSize = 13.sp)
                                 }
                             },
                             onClick = {
                                 showMenu = false
-                                viewModel.openApiSetup()
+                                showVoiceManagementSheet = true
                             }
                         )
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Bookmark, contentDescription = null, tint = Color(0xFF00F0FF), modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.Security, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text("Android Permissions Hub", color = Color.White, fontSize = 13.sp)
+                                }
+                            },
+                            onClick = {
+                                showMenu = false
+                                showPermissionsSheet = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Bookmark, contentDescription = null, tint = Color(0xFF818CF8), modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Text("Memory Vault (${memories.size})", color = Color.White, fontSize = 13.sp)
                                 }
@@ -225,14 +250,27 @@ fun AhiScreen(
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFF2DD4BF), modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(10.dp))
-                                    Text("Profile & Voice", color = Color.White, fontSize = 13.sp)
+                                    Text("Profile Settings", color = Color.White, fontSize = 13.sp)
                                 }
                             },
                             onClick = {
                                 showMenu = false
                                 showProfileSheet = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Key, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text("Gemini API Engine", color = Color.White, fontSize = 13.sp)
+                                }
+                            },
+                            onClick = {
+                                showMenu = false
+                                viewModel.openApiSetup()
                             }
                         )
                         DropdownMenuItem(
@@ -260,7 +298,28 @@ fun AhiScreen(
                     .fillMaxSize()
                     .imePadding()
             ) {
-                Spacer(modifier = Modifier.height(30.dp))
+                Spacer(modifier = Modifier.height(20.dp))
+
+                if (!uiState.isInternetConnected) {
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 24.dp, vertical = 4.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0x22F87171))
+                            .border(1.dp, Color(0x66F87171), RoundedCornerShape(12.dp))
+                            .clickable { viewModel.showUnifiedPermissionModal() }
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                            .testTag("offline_warning_pill")
+                    ) {
+                        Text(
+                            text = "Offline • Internet required for Gemini AI (Tap to fix)",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFFFCA5A5)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
 
                 // Upper-Middle Content: Luminous Blue 3D Ribbon Orb, Greeting, Heading
                 Column(
@@ -273,8 +332,8 @@ fun AhiScreen(
                         amplitude = uiState.audioAmplitude,
                         emotion = uiState.currentEmotion,
                         onClick = {
-                            if (!uiState.hasMicPermission) {
-                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            if (!uiState.hasMicPermission || !uiState.isInternetConnected) {
+                                viewModel.showUnifiedPermissionModal()
                             } else {
                                 viewModel.onOrbClicked()
                             }
@@ -379,8 +438,8 @@ fun AhiScreen(
                     onInputTextChange = { viewModel.onInputTextChange(it) },
                     onSendMessage = { viewModel.sendMessage(it) },
                     onToggleVoice = {
-                        if (!uiState.hasMicPermission) {
-                            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        if (!uiState.hasMicPermission || !uiState.isInternetConnected) {
+                            viewModel.showUnifiedPermissionModal()
                         } else {
                             viewModel.toggleVoiceListening()
                         }
@@ -421,6 +480,52 @@ fun AhiScreen(
                 viewModel.updateVoicePitchAndRate(pitch, rate)
             },
             onDismiss = { showProfileSheet = false }
+        )
+    }
+
+    // Voice & Persona Hub Sheet
+    if (showVoiceManagementSheet) {
+        VoiceManagementSheet(
+            voiceSettings = uiState.voiceSettings,
+            onSaveSettings = { settings ->
+                viewModel.updateVoiceSettings(settings)
+            },
+            onTestVoice = { sampleText ->
+                viewModel.testVoicePreview(sampleText)
+            },
+            onDismiss = { showVoiceManagementSheet = false }
+        )
+    }
+
+    // Android Permissions Center Sheet
+    if (showPermissionsSheet) {
+        PermissionsSheet(
+            onDismiss = {
+                showPermissionsSheet = false
+                val hasPermission = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+                viewModel.setMicPermissionGranted(hasPermission)
+            }
+        )
+    }
+
+    // Unified Permission & Internet Access Flow Modal
+    if (uiState.showUnifiedPermissionModal) {
+        UnifiedPermissionModal(
+            readinessState = readinessState,
+            hasMicPermission = uiState.hasMicPermission,
+            isInternetConnected = uiState.isInternetConnected,
+            onRequestMicPermission = {
+                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            },
+            onRetryConnection = {
+                viewModel.retryConnectionAndPermissions()
+            },
+            onDismiss = {
+                viewModel.dismissUnifiedPermissionModal()
+            }
         )
     }
 }

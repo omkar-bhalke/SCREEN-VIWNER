@@ -19,7 +19,9 @@ data class VoiceSettings(
     val pitch: Float = 1.15f,
     val speechRate: Float = 1.05f,
     val continuousMode: Boolean = true,
-    val voiceName: String = "Kore (Dynamic Female)"
+    val voiceName: String = "Kore (Dynamic Female)",
+    val language: String = "English",
+    val tone: String = "Charming & Witty"
 )
 
 data class AhiUiState(
@@ -38,5 +40,7 @@ data class AhiUiState(
     val memorySavedNotice: String? = null,
     val isConversationActive: Boolean = false,
     val showApiSetupDialog: Boolean = false,
-    val hasSavedApiKey: Boolean = false
+    val hasSavedApiKey: Boolean = false,
+    val isInternetConnected: Boolean = true,
+    val showUnifiedPermissionModal: Boolean = false
 )

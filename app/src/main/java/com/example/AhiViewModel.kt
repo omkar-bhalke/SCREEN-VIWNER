@@ -1,9 +1,11 @@
 package com.example
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.audio.AudioPlayer
+import com.example.audio.AudioRecordService
 import com.example.audio.AudioStreamer
 import com.example.data.local.ChatMessageEntity
 import com.example.data.local.UserMemoryEntity
@@ -15,6 +17,8 @@ import com.example.model.AhiUiState
 import com.example.model.LiveState
 import com.example.model.ToolExecution
 import com.example.model.UserProfile
+import com.example.permission.UnifiedPermissionManager
+import com.example.permission.UnifiedReadinessState
 import com.example.security.KeystoreManager
 import com.example.tools.ToolManager
 import kotlinx.coroutines.Job
@@ -31,6 +35,7 @@ class AhiViewModel(application: Application) : AndroidViewModel(application) {
 
     val keystoreManager = KeystoreManager(application.applicationContext)
     val memoryRepository = MemoryRepository(application.applicationContext)
+    val unifiedPermissionManager = UnifiedPermissionManager(application.applicationContext, viewModelScope)
 
     val memories: StateFlow<List<UserMemoryEntity>> = memoryRepository.getAllMemories()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -42,8 +47,8 @@ class AhiViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(
         AhiUiState(
-            hasSavedApiKey = keystoreManager.hasApiKey(),
-            showApiSetupDialog = !keystoreManager.hasApiKey()
+            hasSavedApiKey = keystoreManager.isConfigured(),
+            showApiSetupDialog = !keystoreManager.isConfigured()
         )
     )
     val uiState: StateFlow<AhiUiState> = _uiState.asStateFlow()
@@ -68,6 +73,32 @@ class AhiViewModel(application: Application) : AndroidViewModel(application) {
                         currentEmotion = profile.currentEmotion
                     )
                 }
+            }
+        }
+
+        viewModelScope.launch {
+            unifiedPermissionManager.isMicGranted.collect { granted ->
+                _uiState.update { it.copy(hasMicPermission = granted) }
+            }
+        }
+
+        viewModelScope.launch {
+            unifiedPermissionManager.isInternetConnected.collect { connected ->
+                _uiState.update { it.copy(isInternetConnected = connected) }
+            }
+        }
+
+        viewModelScope.launch {
+            AudioRecordService.amplitudeFlow.collect { amp ->
+                if (_uiState.value.liveState == LiveState.LISTENING) {
+                    _uiState.update { it.copy(audioAmplitude = amp.coerceAtLeast(0.06f)) }
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            AudioRecordService.errorFlow.collect { err ->
+                Log.w("AhiViewModel", "AudioRecordService error: $err")
             }
         }
     }
@@ -169,7 +200,20 @@ class AhiViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setMicPermissionGranted(granted: Boolean) {
+        unifiedPermissionManager.onMicPermissionResult(granted)
         _uiState.update { it.copy(hasMicPermission = granted) }
+    }
+
+    fun showUnifiedPermissionModal() {
+        _uiState.update { it.copy(showUnifiedPermissionModal = true) }
+    }
+
+    fun dismissUnifiedPermissionModal() {
+        _uiState.update { it.copy(showUnifiedPermissionModal = false) }
+    }
+
+    fun retryConnectionAndPermissions() {
+        unifiedPermissionManager.refreshState()
     }
 
     fun onInputTextChange(newText: String) {
@@ -177,12 +221,15 @@ class AhiViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleVoiceListening() {
-        if (!_uiState.value.hasMicPermission) {
+        val readiness = unifiedPermissionManager.checkCurrentReadiness()
+        if (readiness != UnifiedReadinessState.ALL_READY) {
+            _uiState.update { it.copy(showUnifiedPermissionModal = true) }
             return
         }
 
         when (_uiState.value.liveState) {
             LiveState.LISTENING -> {
+                AudioRecordService.stop(getApplication())
                 audioStreamer?.stopListening()
                 _uiState.update { it.copy(liveState = LiveState.IDLE, audioAmplitude = 0f) }
             }
@@ -200,7 +247,11 @@ class AhiViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startListening() {
-        if (!_uiState.value.hasMicPermission) return
+        val readiness = unifiedPermissionManager.checkCurrentReadiness()
+        if (readiness != UnifiedReadinessState.ALL_READY) {
+            _uiState.update { it.copy(showUnifiedPermissionModal = true) }
+            return
+        }
         audioPlayer?.stop()
         _uiState.update {
             it.copy(
@@ -209,6 +260,7 @@ class AhiViewModel(application: Application) : AndroidViewModel(application) {
                 userSpeechLive = ""
             )
         }
+        AudioRecordService.start(getApplication())
         audioStreamer?.startListening()
     }
 
@@ -228,6 +280,7 @@ class AhiViewModel(application: Application) : AndroidViewModel(application) {
         val trimmed = input.trim()
         if (trimmed.isBlank()) return
 
+        AudioRecordService.stop(getApplication())
         audioStreamer?.stopListening()
         _uiState.update {
             it.copy(
@@ -320,6 +373,19 @@ class AhiViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateVoiceSettings(settings: com.example.model.VoiceSettings) {
+        audioPlayer?.setPitchAndRate(settings.pitch, settings.speechRate)
+        audioPlayer?.setLanguage(settings.language)
+        _uiState.update {
+            it.copy(voiceSettings = settings)
+        }
+    }
+
+    fun testVoicePreview(text: String) {
+        audioPlayer?.stop()
+        audioPlayer?.speak(text)
+    }
+
     fun setEmotion(emotion: AhiEmotion) {
         memoryRepository.setEmotion(emotion)
     }
@@ -337,5 +403,7 @@ class AhiViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
         audioPlayer?.release()
         audioStreamer?.release()
+        AudioRecordService.stop(getApplication())
+        unifiedPermissionManager.release()
     }
 }
