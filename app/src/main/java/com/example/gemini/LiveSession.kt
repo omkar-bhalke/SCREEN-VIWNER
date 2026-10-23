@@ -40,7 +40,7 @@ class LiveSession(
         memories: List<UserMemoryEntity>,
         apiKey: String?
     ): Pair<String, SessionResponse> = withContext(Dispatchers.IO) {
-        val effectiveKey: String = apiKey?.trim().orEmpty()
+        val effectiveKey: String = GeminiConfig.cleanKey(apiKey)
 
         // Check for direct memory saving intent
         val memoryIntent = detectMemorySaveIntent(userText)
@@ -99,71 +99,88 @@ class LiveSession(
         }
 
         try {
-            val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+            val contentsArray = JSONArray()
+            // Append historical context up to last 8 turns
+            for (turn in conversationHistory.takeLast(8)) {
+                contentsArray.put(turn)
+            }
+            contentsArray.put(JSONObject().apply {
+                put("role", "user")
+                put("parts", JSONArray().apply {
+                    put(JSONObject().apply { put("text", userText) })
+                })
+            })
 
-            val requestJson = JSONObject().apply {
+            val toolsArray = JSONArray().apply {
+                put(JSONObject().apply {
+                    put("functionDeclarations", JSONArray().apply {
+                        put(createToolDeclaration("openWebsite", "Opens a website or searches the web", listOf("url", "query")))
+                        put(createToolDeclaration("openApp", "Opens an installed Android app like camera, settings, calculator, maps", listOf("appName")))
+                        put(createToolDeclaration("toggleFlashlight", "Turns device flashlight/torch on or off", listOf("state")))
+                        put(createToolDeclaration("getDeviceStatus", "Gets real device battery and network info", emptyList()))
+                        put(createToolDeclaration("setTimer", "Sets a timer in minutes", listOf("minutes", "label")))
+                    })
+                })
+            }
+
+            fun buildRequest(withThinking: Boolean): JSONObject = JSONObject().apply {
                 put("systemInstruction", JSONObject().apply {
                     put("parts", JSONArray().apply {
                         put(JSONObject().apply { put("text", systemInstruction) })
                     })
                 })
-
-                val contentsArray = JSONArray()
-                // Append historical context up to last 8 turns
-                for (turn in conversationHistory.takeLast(8)) {
-                    contentsArray.put(turn)
-                }
-
-                // Append current user turn
-                val userTurn = JSONObject().apply {
-                    put("role", "user")
-                    put("parts", JSONArray().apply {
-                        put(JSONObject().apply { put("text", userText) })
-                    })
-                }
-                contentsArray.put(userTurn)
                 put("contents", contentsArray)
-
-                // Tools declaration
-                val toolsArray = JSONArray().apply {
-                    put(JSONObject().apply {
-                        put("functionDeclarations", JSONArray().apply {
-                            put(createToolDeclaration("openWebsite", "Opens a website or searches the web", listOf("url", "query")))
-                            put(createToolDeclaration("openApp", "Opens an installed Android app like camera, settings, calculator, maps", listOf("appName")))
-                            put(createToolDeclaration("toggleFlashlight", "Turns device flashlight/torch on or off", listOf("state")))
-                            put(createToolDeclaration("getDeviceStatus", "Gets real device battery and network info", emptyList()))
-                            put(createToolDeclaration("setTimer", "Sets a timer in minutes", listOf("minutes", "label")))
-                        })
-                    })
-                }
                 put("tools", toolsArray)
-
                 put("generationConfig", JSONObject().apply {
                     put("temperature", 0.85)
-                    put("maxOutputTokens", 160)
+                    // Thinking tokens count as output, so keep room for them.
+                    put("maxOutputTokens", 1024)
+                    if (withThinking) {
+                        // Fast, cheap voice replies: low thinking effort.
+                        put("thinkingConfig", JSONObject().apply { put("thinkingLevel", "low") })
+                    }
                 })
             }
 
             val mediaType = "application/json; charset=utf-8".toMediaType()
-            val body = requestJson.toString().toRequestBody(mediaType)
-            val request = Request.Builder()
-                .url(endpoint)
-                .addHeader("x-goog-api-key", effectiveKey)
-                .post(body)
-                .build()
+            var responseBody: String? = null
+            var lastCode = 0
 
-            val response = client.newCall(request).execute()
-            val responseBody = response.body?.string()
+            modelLoop@ for (model in GeminiConfig.MODELS) {
+                for (withThinking in listOf(true, false)) {
+                    val request = Request.Builder()
+                        .url(GeminiConfig.endpoint(model))
+                        .addHeader("x-goog-api-key", effectiveKey)
+                        .post(buildRequest(withThinking).toString().toRequestBody(mediaType))
+                        .build()
 
-            if (!response.isSuccessful || responseBody.isNullOrBlank()) {
-                Log.w("LiveSession", "Gemini API error: ${response.code} $responseBody")
+                    client.newCall(request).execute().use { response ->
+                        lastCode = response.code
+                        val text = response.body?.string()
+                        if (response.isSuccessful && !text.isNullOrBlank()) {
+                            responseBody = text
+                        } else {
+                            Log.w("LiveSession", "Gemini $model error: ${response.code} $text")
+                        }
+                    }
+                    if (responseBody != null) break@modelLoop
+                    // 400 may come from the thinking option -> retry same model without it.
+                    // 404 -> next model. Any other error -> stop trying.
+                    if (lastCode == 400) continue
+                    if (lastCode == 404) continue@modelLoop
+                    break@modelLoop
+                }
+            }
+
+            val rawBody = responseBody
+            if (rawBody.isNullOrBlank()) {
                 val fallback = generateSmartWittyFallback(userText, userProfile, memories)
                 recordTurn("user", userText)
                 recordTurn("model", fallback)
                 return@withContext fallback to SessionResponse.SpokenMessage(fallback)
             }
 
-            val json = JSONObject(responseBody)
+            val json = JSONObject(rawBody)
             val candidates = json.optJSONArray("candidates")
             val firstCandidate = candidates?.optJSONObject(0)
             val content = firstCandidate?.optJSONObject("content")
@@ -236,17 +253,20 @@ class LiveSession(
         return JSONObject().apply {
             put("name", name)
             put("description", desc)
-            put("parameters", JSONObject().apply {
-                put("type", "OBJECT")
-                val props = JSONObject()
-                for (p in requiredParams) {
-                    props.put(p, JSONObject().apply {
-                        put("type", "STRING")
-                        put("description", "Parameter $p")
-                    })
-                }
-                put("properties", props)
-            })
+            // Gemini rejects an OBJECT schema with empty properties, so omit it then.
+            if (requiredParams.isNotEmpty()) {
+                put("parameters", JSONObject().apply {
+                    put("type", "OBJECT")
+                    val props = JSONObject()
+                    for (p in requiredParams) {
+                        props.put(p, JSONObject().apply {
+                            put("type", "STRING")
+                            put("description", "Parameter $p")
+                        })
+                    }
+                    put("properties", props)
+                })
+            }
         }
     }
 

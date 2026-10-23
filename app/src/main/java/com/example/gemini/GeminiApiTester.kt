@@ -19,55 +19,68 @@ sealed class TestResult {
 object GeminiApiTester {
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
+        .connectTimeout(12, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
         .build()
 
     suspend fun testKey(apiKey: String): TestResult = withContext(Dispatchers.IO) {
-        val trimmed = apiKey.trim()
-        if (trimmed.isBlank()) {
+        val key = GeminiConfig.cleanKey(apiKey)
+        if (key.isBlank()) {
             return@withContext TestResult.Error("API key cannot be empty.")
         }
-        if (!trimmed.startsWith("AIza")) {
-            return@withContext TestResult.Error("Key format invalid. Gemini API keys typically start with 'AIza'.")
+        if (!GeminiConfig.isPlausibleKey(key)) {
+            return@withContext TestResult.Error("Key looks incomplete or has invalid characters. Please copy the full key again.")
         }
 
-        try {
-            val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
-            val bodyJson = JSONObject().apply {
-                put("contents", JSONArray().apply {
-                    put(JSONObject().apply {
-                        put("parts", JSONArray().apply {
-                            put(JSONObject().apply { put("text", "hello") })
-                        })
+        val bodyJson = JSONObject().apply {
+            put("contents", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("role", "user")
+                    put("parts", JSONArray().apply {
+                        put(JSONObject().apply { put("text", "hello") })
                     })
                 })
-            }
+            })
+            put("generationConfig", JSONObject().apply {
+                put("maxOutputTokens", 64)
+            })
+        }
+        val mediaType = "application/json; charset=utf-8".toMediaType()
 
-            val mediaType = "application/json; charset=utf-8".toMediaType()
-            val requestBody = bodyJson.toString().toRequestBody(mediaType)
+        var lastError = "No Gemini model was reachable with this key."
+        try {
+            for (model in GeminiConfig.MODELS) {
+                val request = Request.Builder()
+                    .url(GeminiConfig.endpoint(model))
+                    .addHeader("x-goog-api-key", key)
+                    .post(bodyJson.toString().toRequestBody(mediaType))
+                    .build()
 
-            val request = Request.Builder()
-                .url(url)
-                .addHeader("x-goog-api-key", trimmed)
-                .post(requestBody)
-                .build()
-
-            val response = client.newCall(request).execute()
-            val responseBody = response.body?.string()
-
-            if (response.isSuccessful) {
-                TestResult.Success
-            } else {
-                val errorMsg = when (response.code) {
-                    400, 403 -> "Invalid API key (HTTP ${response.code}). Please verify your key on Google AI Studio."
-                    429 -> "Rate limit reached (HTTP 429). Please check your AI Studio quota."
-                    else -> "API test failed (HTTP ${response.code}): ${parseErrorMessage(responseBody)}"
+                client.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string()
+                    when {
+                        // 200 = works. 429 = key is valid but quota is used up (still accepted).
+                        response.isSuccessful || response.code == 429 -> return@withContext TestResult.Success
+                        // Model not available -> try next model
+                        response.code == 404 -> {
+                            lastError = "Model $model not available (HTTP 404)."
+                        }
+                        response.code == 401 || response.code == 403 || response.code == 400 -> {
+                            return@withContext TestResult.Error(
+                                "Key rejected (HTTP ${response.code}): ${parseErrorMessage(responseBody)}"
+                            )
+                        }
+                        else -> {
+                            return@withContext TestResult.Error(
+                                "Gemini test failed (HTTP ${response.code}): ${parseErrorMessage(responseBody)}"
+                            )
+                        }
+                    }
                 }
-                TestResult.Error(errorMsg)
             }
+            TestResult.Error(lastError)
         } catch (e: IOException) {
-            TestResult.Error("Network error: Unable to reach Google servers. Please check your internet connection.")
+            TestResult.Error("Network error: unable to reach Google servers. Check your internet connection.")
         } catch (e: Exception) {
             TestResult.Error("Error validating key: ${e.localizedMessage ?: "Unknown error"}")
         }
@@ -76,9 +89,8 @@ object GeminiApiTester {
     private fun parseErrorMessage(jsonStr: String?): String {
         if (jsonStr.isNullOrBlank()) return "No response from server"
         return try {
-            val json = JSONObject(jsonStr)
-            val error = json.optJSONObject("error")
-            error?.optString("message") ?: "API verification error"
+            JSONObject(jsonStr).optJSONObject("error")?.optString("message")
+                ?.takeIf { it.isNotBlank() } ?: "Verification error"
         } catch (e: Exception) {
             "Verification error"
         }

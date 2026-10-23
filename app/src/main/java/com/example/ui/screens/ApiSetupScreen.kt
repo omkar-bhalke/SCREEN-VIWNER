@@ -64,6 +64,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.gemini.GeminiApiTester
+import com.example.gemini.GeminiConfig
 import com.example.gemini.TestResult
 import kotlinx.coroutines.launch
 
@@ -297,7 +298,7 @@ fun ApiSetupScreen(
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                                         val clip = clipboard?.primaryClip?.getItemAt(0)?.text?.toString()
                                         if (!clip.isNullOrBlank()) {
-                                            apiKeyText = clip.trim()
+                                            apiKeyText = GeminiConfig.cleanKey(clip)
                                             testFeedback = null
                                             isError = false
                                         }
@@ -526,7 +527,7 @@ fun ApiSetupScreen(
                                 isTesting = false
                                 when (result) {
                                     is TestResult.Success -> {
-                                        onKeySaved(apiKeyText.trim())
+                                        onKeySaved(GeminiConfig.cleanKey(apiKeyText))
                                     }
                                     is TestResult.Error -> {
                                         testFeedback = result.message
